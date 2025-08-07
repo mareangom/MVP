@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Home Decorator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* Simulated Camera View */
+        .camera-view {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(255,255,255,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255,255,255,0.1) 0%, transparent 50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .room-simulation {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="%23f0f0f0"/><rect x="0" y="200" width="400" height="100" fill="%23d0d0d0"/><rect x="50" y="50" width="100" height="150" fill="%23e8e8e8" stroke="%23ccc"/><rect x="250" y="80" width="120" height="120" fill="%23f5f5f5" stroke="%23ddd"/></svg>') center/cover;
+            opacity: 0.8;
+        }
+
+        /* Placed Items */
+        .placed-item {
+            position: absolute;
+            cursor: grab;
+            transition: transform 0.2s ease;
+            z-index: 10;
+        }
+
+        .placed-item:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+        }
+
+        .furniture-item {
+            width: 80px;
+            height: 60px;
+            background: #8B4513;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            text-align: center;
+        }
+
+        .paint-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.3;
+            pointer-events: none;
+            mix-blend-mode: multiply;
+        }
+
+        .decor-item {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+
+        /* UI Controls */
+        .top-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 100;
+        }
+
+        .app-title {
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .camera-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .bottom-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0,0,0,0.9);
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            transition: transform 0.3s ease;
+        }
+
+        .panel-tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            color: rgba(255,255,255,0.6);
+            font-size: 14px;
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+
+        .tab.active {
+            color: #007AFF;
+            border-bottom: 2px solid #007AFF;
+        }
+
+        .panel-content {
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .item-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .catalog-item {
+            background: rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .catalog-item:hover {
+            background: rgba(255,255,255,0.2);
+        }
+
+        .item-preview {
+            width: 60px;
+            height: 45px;
+            margin: 0 auto 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .furniture-preview { background: #8B4513; }
+        .paint-preview { background: var(--color, #FF6B6B); border-radius: 50%; }
+        .decor-preview { background: var(--color, #4ECDC4); border-radius: 50%; }
+
+        .item-name {
+            color: white;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .item-price {
+            color: #007AFF;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .purchase-btn {
+            position: fixed;
+            bottom: 100px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #007AFF;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,122,255,0.4);
+            z-index: 50;
+            transition: transform 0.2s ease;
+            display: none;
+        }
+
+        .purchase-btn.show {
+            display: block;
+        }
+
+        .purchase-btn:active {
+            transform: scale(0.95);
+        }
+
+        .selection-indicator {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            width: 20px;
+            height: 20px;
+            background: #007AFF;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+        }
+
+        .placed-item.selected .selection-indicator {
+            display: flex;
+        }
+
+        .clear-btn {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            background: rgba(255,0,0,0.7);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body>
+    <div class="camera-view">
+        <div class="room-simulation" id="roomView">
+            <!-- Placed items will appear here -->
+        </div>
+    </div>
+
+    <div class="top-bar">
+        <div class="app-title">AR Home Decorator</div>
+        <button class="camera-button">📷</button>
+    </div>
+
+    <button class="clear-btn" onclick="clearAllItems()">Clear All</button>
+
+    <button class="purchase-btn" id="purchaseBtn">🛒</button>
+
+    <div class="bottom-panel">
+        <div class="panel-tabs">
+            <div class="tab active" onclick="switchTab('furniture')">Furniture</div>
+            <div class="tab" onclick="switchTab('paint')">Paint</div>
+            <div class="tab" onclick="switchTab('decor')">Decor</div>
+        </div>
+        
+        <div class="panel-content">
+            <div id="furniture" class="item-grid">
+                <div class="catalog-item" onclick="addItem('sofa', 'furniture')">
+                    <div class="item-preview furniture-preview">🛋️</div>
+                    <div class="item-name">Modern Sofa</div>
+                    <div class="item-price">$899</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('chair', 'furniture')">
+                    <div class="item-preview furniture-preview">🪑</div>
+                    <div class="item-name">Accent Chair</div>
+                    <div class="item-price">$299</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('table', 'furniture')">
+                    <div class="item-preview furniture-preview">🪑</div>
+                    <div class="item-name">Coffee Table</div>
+                    <div class="item-price">$449</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('bookshelf', 'furniture')">
+                    <div class="item-preview furniture-preview">📚</div>
+                    <div class="item-name">Bookshelf</div>
+                    <div class="item-price">$199</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('desk', 'furniture')">
+                    <div class="item-preview furniture-preview">🖥️</div>
+                    <div class="item-name">Work Desk</div>
+                    <div class="item-price">$349</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('bed', 'furniture')">
+                    <div class="item-preview furniture-preview">🛏️</div>
+                    <div class="item-name">Queen Bed</div>
+                    <div class="item-price">$699</div>
+                </div>
+            </div>
+
+            <div id="paint" class="item-grid" style="display: none;">
+                <div class="catalog-item" onclick="addPaint('#FF6B6B')">
+                    <div class="item-preview paint-preview" style="--color: #FF6B6B"></div>
+                    <div class="item-name">Coral Red</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+                <div class="catalog-item" onclick="addPaint('#4ECDC4')">
+                    <div class="item-preview paint-preview" style="--color: #4ECDC4"></div>
+                    <div class="item-name">Ocean Blue</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+                <div class="catalog-item" onclick="addPaint('#45B7D1')">
+                    <div class="item-preview paint-preview" style="--color: #45B7D1"></div>
+                    <div class="item-name">Sky Blue</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+                <div class="catalog-item" onclick="addPaint('#96CEB4')">
+                    <div class="item-preview paint-preview" style="--color: #96CEB4"></div>
+                    <div class="item-name">Sage Green</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+                <div class="catalog-item" onclick="addPaint('#FFEAA7')">
+                    <div class="item-preview paint-preview" style="--color: #FFEAA7"></div>
+                    <div class="item-name">Warm Yellow</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+                <div class="catalog-item" onclick="addPaint('#DDA0DD')">
+                    <div class="item-preview paint-preview" style="--color: #DDA0DD"></div>
+                    <div class="item-name">Lavender</div>
+                    <div class="item-price">$45/gal</div>
+                </div>
+            </div>
+
+            <div id="decor" class="item-grid" style="display: none;">
+                <div class="catalog-item" onclick="addItem('plant', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #4CAF50">🌿</div>
+                    <div class="item-name">Fiddle Leaf Fig</div>
+                    <div class="item-price">$89</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('lamp', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #FFC107">💡</div>
+                    <div class="item-name">Table Lamp</div>
+                    <div class="item-price">$129</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('art', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #9C27B0">🖼️</div>
+                    <div class="item-name">Wall Art</div>
+                    <div class="item-price">$159</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('mirror', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #607D8B">🪞</div>
+                    <div class="item-name">Round Mirror</div>
+                    <div class="item-price">$79</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('vase', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #795548">🏺</div>
+                    <div class="item-name">Ceramic Vase</div>
+                    <div class="item-price">$49</div>
+                </div>
+                <div class="catalog-item" onclick="addItem('rug', 'decor')">
+                    <div class="item-preview decor-preview" style="--color: #FF5722">🟫</div>
+                    <div class="item-name">Area Rug</div>
+                    <div class="item-price">$299</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedItem = null;
+        let placedItems = [];
+        let itemCounter = 0;
+
+        function switchTab(tabName) {
+            // Update tab styles
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Show/hide content
+            document.querySelectorAll('.item-grid').forEach(grid => grid.style.display = 'none');
+            document.getElementById(tabName).style.display = 'grid';
+        }
+
+        function addItem(itemType, category) {
+            const roomView = document.getElementById('roomView');
+            const item = document.createElement('div');
+            item.className = `placed-item ${category}-item`;
+            item.id = `item-${itemCounter++}`;
+
+            // Position randomly in the room
+            const x = Math.random() * (window.innerWidth - 100) + 50;
+            const y = Math.random() * (window.innerHeight - 200) + 100;
+            item.style.left = x + 'px';
+            item.style.top = y + 'px';
+
+            // Add content based on type
+            const icons = {
+                sofa: '🛋️', chair: '🪑', table: '🪑', bookshelf: '📚', desk: '🖥️', bed: '🛏️',
+                plant: '🌿', lamp: '💡', art: '🖼️', mirror: '🪞', vase: '🏺', rug: '🟫'
+            };
+
+            if (category === 'furniture') {
+                item.innerHTML = icons[itemType] || '📦';
+            } else if (category === 'decor') {
+                item.innerHTML = icons[itemType] || '✨';
+                item.classList.add('decor-item');
+                const colors = ['#4CAF50', '#FFC107', '#9C27B0', '#607D8B', '#795548', '#FF5722'];
+                item.style.background = colors[Math.floor(Math.random() * colors.length)];
+            }
+
+            // Add selection indicator
+            const indicator = document.createElement('div');
+            indicator.className = 'selection-indicator';
+            indicator.innerHTML = '✓';
+            item.appendChild(indicator);
+
+            // Store item data
+            item.dataset.type = itemType;
+            item.dataset.category = category;
+            
+            // Make draggable
+            makeDraggable(item);
+            
+            // Add click handler for selection
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                selectItem(item);
+            });
+
+            roomView.appendChild(item);
+            placedItems.push(item);
+        }
+
+        function addPaint(color) {
+            const roomView = document.getElementById('roomView');
+            
+            // Remove existing paint overlay
+            const existingOverlay = roomView.querySelector('.paint-overlay');
+            if (existingOverlay) {
+                existingOverlay.remove();
+            }
+
+            // Add new paint overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'paint-overlay';
+            overlay.style.backgroundColor = color;
+            overlay.dataset.type = 'paint';
+            overlay.dataset.color = color;
+            
+            roomView.appendChild(overlay);
+            
+            // Select the paint overlay
+            selectItem(overlay);
+        }
+
+        function selectItem(item) {
+            // Deselect previous item
+            if (selectedItem) {
+                selectedItem.classList.remove('selected');
+            }
+            
+            // Select new item
+            selectedItem = item;
+            item.classList.add('selected');
+            
+            // Show purchase button
+            document.getElementById('purchaseBtn').classList.add('show');
+            
+            // Add click handler to purchase button
+            document.getElementById('purchaseBtn').onclick = function() {
+                purchaseItem(item);
+            };
+        }
+
+        function purchaseItem(item) {
+            const itemType = item.dataset.type;
+            const category = item.dataset.category;
+            
+            // Simulate opening retailer website
+            const stores = {
+                furniture: 'https://www.wayfair.com',
+                paint: 'https://www.benjaminmoore.com',
+                decor: 'https://www.westelm.com'
+            };
+            
+            const storeUrl = item.dataset.color ? stores.paint : stores[category] || stores.furniture;
+            
+            alert(`Opening ${storeUrl} to purchase ${itemType}!\n\nIn the real app, this would take you directly to the product page.`);
+            
+            // In real app: window.open(storeUrl, '_blank');
+        }
+
+        function makeDraggable(element) {
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+
+            element.addEventListener('touchstart', dragStart, {passive: false});
+            element.addEventListener('touchend', dragEnd);
+            element.addEventListener('touchmove', drag, {passive: false});
+            
+            element.addEventListener('mousedown', dragStart);
+            element.addEventListener('mouseup', dragEnd);
+            element.addEventListener('mousemove', drag);
+
+            function dragStart(e) {
+                if (e.type === 'touchstart') {
+                    initialX = e.touches[0].clientX - element.offsetLeft;
+                    initialY = e.touches[0].clientY - element.offsetTop;
+                } else {
+                    initialX = e.clientX - element.offsetLeft;
+                    initialY = e.clientY - element.offsetTop;
+                }
+
+                if (e.target === element) {
+                    isDragging = true;
+                }
+            }
+
+            function dragEnd() {
+                isDragging = false;
+            }
+
+            function drag(e) {
+                if (isDragging) {
+                    e.preventDefault();
+                    
+                    if (e.type === 'touchmove') {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+
+                    element.style.left = currentX + 'px';
+                    element.style.top = currentY + 'px';
+                }
+            }
+        }
+
+        function clearAllItems() {
+            const roomView = document.getElementById('roomView');
+            placedItems.forEach(item => item.remove());
+            
+            // Also remove paint overlay
+            const paintOverlay = roomView.querySelector('.paint-overlay');
+            if (paintOverlay) paintOverlay.remove();
+            
+            placedItems = [];
+            selectedItem = null;
+            document.getElementById('purchaseBtn').classList.remove('show');
+        }
+
+        // Deselect items when clicking on empty space
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('room-simulation') || e.target.classList.contains('camera-view')) {
+                if (selectedItem) {
+                    selectedItem.classList.remove('selected');
+                    selectedItem = null;
+                    document.getElementById('purchaseBtn').classList.remove('show');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
